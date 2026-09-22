@@ -64,7 +64,7 @@ def ingest_file(file_path, primary_key, expected_cols):
     logger.info('Primary key validation passed.')
 
     # 8. Return the data
-    logger.info("Validation checks passed.")
+    logger.info("All initial validation checks passed.")
     return file
 
 def read_file(file_path):
@@ -72,6 +72,18 @@ def read_file(file_path):
 
 def get_data_path(file_name):
     return Path("..") / "data" / file_name
+
+def validate_foreign_key(child_values, parent_values):
+
+    # Get items in child values that are not in parent values
+    diff = set(child_values) - set(parent_values)
+    
+    # Determine which child values don't exist in parent (if any)
+    if diff:
+        logger.error(f"Child set contains unmapped item(s) {diff}")
+        raise ValueError(f"Child set contains unmapped item(s) {diff}")
+    
+    logger.info("Foreign Key Validation Passed")
     
 def main():
 
@@ -82,30 +94,70 @@ def main():
         "orders": {
             "file_name": "orders.csv",
             "primary_key": ["order_id"],
-            "expected_cols": {"order_id", "user_id", "eval_set", "order_number", "order_dow", "order_hour_of_day", "days_since_prior_order"}
+            "expected_cols": {"order_id", "user_id", "eval_set", "order_number", "order_dow", "order_hour_of_day", "days_since_prior_order"},
+            "foreign_keys": []
         },
         "products": {
             "file_name": "products.csv",
             "primary_key": ["product_id"],
-            "expected_cols": {"product_id", "product_name", "aisle_id", "department_id"}
+            "expected_cols": {"product_id", "product_name", "aisle_id", "department_id"},
+            "foreign_keys": [
+                {
+                    "column": "aisle_id",
+                    "reference_dataset": "aisles",
+                    "reference_column": "aisle_id"
+                },
+                {
+                    "column": "department_id",
+                    "reference_dataset": "departments",
+                    "reference_column": "department_id"
+                }
+            ]
         },
         "aisles": {
             "file_name": "aisles.csv",
             "primary_key": ["aisle_id"],
-            "expected_cols": {"aisle_id", "aisle"}
+            "expected_cols": {"aisle_id", "aisle"},
+            "foreign_keys": []
         },
         "departments": {
             "file_name": "departments.csv",
             "primary_key": ["department_id"],
-            "expected_cols": {"department_id", "department"}
+            "expected_cols": {"department_id", "department"},
+            "foreign_keys": []
         }
     }
 
-    for ds in datasets.values():
-        ingest_file(get_data_path(ds["file_name"]),
-                    ds["primary_key"],
-                    ds["expected_cols"]
+    data = {}
+
+    # First ingest all the datasets
+    for name, ds in datasets.items():
+        data[name] = ingest_file(
+            get_data_path(ds["file_name"]),
+            ds["primary_key"],
+            ds["expected_cols"]
         )
+
+    # Then loop through datasets again to validate all foreign key relationships
+    for name, ds in datasets.items():
+        for fk in ds["foreign_keys"]:
+
+            if fk["reference_dataset"] not in data:
+                logger.error(f"Foreign key dataset {fk['reference_dataset']} not found in data")
+                raise KeyError(f"Foreign key dataset {fk['reference_dataset']} not found in data")
+            
+            if fk["reference_column"] not in data[fk['reference_dataset']]:
+                logger.error(f"Foreign key {fk['reference_column']} not found in {fk['reference_dataset']}")
+                raise KeyError(f"Foreign key {fk['reference_column']} not found in {fk['reference_dataset']}")
+            
+            if fk["column"] not in data[name]:
+                logger.error(f"Foreign key {fk['column']} not found in {name}")
+                raise KeyError(f"Foregin key {fk['column']} not found in {name}")
+                
+            validate_foreign_key(
+                data[name][fk["column"]],
+                data[fk['reference_dataset']][fk["reference_column"]]
+            )
 
 if __name__ == "__main__":
     main()
