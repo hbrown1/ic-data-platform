@@ -68,7 +68,13 @@ def ingest_file(file_path, primary_key, expected_cols):
     return file
 
 def read_file(file_path):
-    return pd.read_csv(file_path)
+
+    try:
+        return pd.read_csv(file_path)
+    
+    except Exception:
+        logger.error(f"Failed to read csv file at {file_path}")
+        raise
 
 def get_data_path(file_name):
     return Path("..") / "data" / file_name
