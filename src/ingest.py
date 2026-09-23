@@ -1,12 +1,13 @@
 from pathlib import Path
 import pandas as pd
 import logging
+import yaml
 
 logger = logging.getLogger(__name__)
 
-# Set min log level to info so we can see logs in terminal
+# Set min log level
 logging.basicConfig(
-    level = logging.INFO
+    level = logging.ERROR
 )
 
 def ingest_file(file_path, primary_key, expected_cols):
@@ -44,7 +45,7 @@ def ingest_file(file_path, primary_key, expected_cols):
 
     # 5. Check expected columns
     # Using a set to ignore order 
-    if not set(file.columns) == expected_cols:
+    if not set(file.columns) == set(expected_cols):
         logger.error(f"Expected columns not found: {expected_cols}.")
         raise ValueError("Expected columns not found.")
     
@@ -68,7 +69,6 @@ def ingest_file(file_path, primary_key, expected_cols):
     return file
 
 def read_file(file_path):
-
     try:
         return pd.read_csv(file_path)
     
@@ -78,6 +78,9 @@ def read_file(file_path):
 
 def get_data_path(file_name):
     return Path("..") / "data" / file_name
+
+def get_config_path():
+    return Path("..") / "config" / "datasets.yaml"
 
 def validate_foreign_key(child_values, parent_values):
 
@@ -90,49 +93,28 @@ def validate_foreign_key(child_values, parent_values):
         raise ValueError(f"Child set contains unmapped item(s) {diff}")
     
     logger.info("Foreign Key Validation Passed")
-    
+
+def load_config(file_path):
+    try:
+        with open(file_path, "r") as file:
+            config = yaml.safe_load(file)
+
+        return config
+
+    except:
+        logger.error("Failed to load config file at {file_path}")
+        raise
+
+def validate_config(config):
+    ...
+
 def main():
 
     logger.info("Starting script execution...")
 
-    # Primary key is a list to allow for multiple keys
-    datasets = {
-        "orders": {
-            "file_name": "orders.csv",
-            "primary_key": ["order_id"],
-            "expected_cols": {"order_id", "user_id", "eval_set", "order_number", "order_dow", "order_hour_of_day", "days_since_prior_order"},
-            "foreign_keys": []
-        },
-        "products": {
-            "file_name": "products.csv",
-            "primary_key": ["product_id"],
-            "expected_cols": {"product_id", "product_name", "aisle_id", "department_id"},
-            "foreign_keys": [
-                {
-                    "column": "aisle_id",
-                    "reference_dataset": "aisles",
-                    "reference_column": "aisle_id"
-                },
-                {
-                    "column": "department_id",
-                    "reference_dataset": "departments",
-                    "reference_column": "department_id"
-                }
-            ]
-        },
-        "aisles": {
-            "file_name": "aisles.csv",
-            "primary_key": ["aisle_id"],
-            "expected_cols": {"aisle_id", "aisle"},
-            "foreign_keys": []
-        },
-        "departments": {
-            "file_name": "departments.csv",
-            "primary_key": ["department_id"],
-            "expected_cols": {"department_id", "department"},
-            "foreign_keys": []
-        }
-    }
+    config = load_config(get_config_path())
+    validate_config(config)
+    datasets = config["datasets"]
 
     data = {}
 
